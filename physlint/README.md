@@ -18,28 +18,28 @@ You get file, line, the parameter names, and the function they were read in.
 You'll need `pip install libclang`. `--entry` is for directories with more than one root file, `-D` is for
 things like CUDA qualifiers, `--verbose` also shows the PLANT and CALL lines.
 
-I ran it on eight environments on 2026-09-17, giving it only the directory:
+I ran it over every environment in PufferLib's `ocean/` directory on 2026-09-17, 85 in total, plus the
+tensaur/drone repo the whole thing started from. It got the directory and nothing else.
 
-| target | hidden randomized fields | flags | found |
-|---|---|---|---|
-| tensaur/drone `73aa519` | 13 | 1 | `dronelib.h:271`, target RPM depends on mass, k_thrust, gravity via `rpm_hover` |
-| PufferLib 5.0 `ocean/drone` | 27 | 1 | `physics.h:356`, same thing through the vectorized `Paramsv` copy |
-| `ocean/robot_arm` | 0 | 0 | randomizes object pose and joint config, but the policy sees both |
-| `ocean/double_pendulum` | 0 | 0 | randomizes initial state, observed |
-| `ocean/cartpole` | 0 | 0 | same |
-| `ocean/whisker_racer` | 1 | 0 | randomizes the track, nothing on the action path |
-| `ocean/matsci` | 0 | 0 | observed |
-| `ocean/squared_continuous` | 0 | 0 | nothing randomized |
+| result | count | which |
+|---|---|---|
+| true positive | 2 | tensaur/drone `dronelib.h:271` and PufferLib's own `ocean/drone` at `physics.h:356`, both the bug in tensaur/drone#35 |
+| false positive | 2 | both in `osrs`, a 2,100-function game sim, where the slice through a local reaches a boss spawn direction |
+| clean | 83 | everything else, including `robot_arm`, `double_pendulum`, `cartpole`, `impulse_wars` |
 
-So two hits, both the bug from tensaur/drone#35, one of them in the 5.0 env the maintainer is porting to.
-Six clean.
+Before the last two rules went in (randomization only counts on a reset path, test and benchmark files
+are skipped) it produced 120 false positives, most of them from game randomness drawn during the step and
+from a benchmark helper that fills the action buffer with noise. The true positive never moved.
 
 Things to know before trusting it:
 
 - MAPPING vs PLANT is decided by what the left-hand side is called. Look at the verbose output if a flag
   seems off.
-- In a big monolithic step function the slice pulls in more than it should. The robot arm came out clean
-  because nothing there is hidden from the policy, not because the slice is tight.
+- In a big monolithic step function the slice pulls in more than it should. That's where the two osrs
+  false positives come from, and the robot arm came out clean because nothing there is hidden from the
+  policy, not because the slice is tight.
+- Only randomization on a reset or init path counts. If an environment draws its physical parameters
+  somewhere with an unusual name, they'll be missed.
 - "Observed" means some function that writes to `observations` or `obs` reads the field. If the buffer is
   called something else, or built in another file, it'll miss that.
 - It only looks at the sim. It can tell you the mapping depends on a hidden parameter. Whether the firmware

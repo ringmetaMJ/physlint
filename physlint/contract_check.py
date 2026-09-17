@@ -71,10 +71,26 @@ def fields_read(c):
 def callees(c):
     return {ch.spelling for ch in walk(c) if ch.kind == K.CALL_EXPR and ch.spelling}
 
+RESET_NAMES = re.compile(r'(reset|init|spawn|setup|randomi[sz]e|sample_params|domain_rand)', re.I)
+
+def reset_reachable(fns):
+    """functions reachable from any function whose name looks like reset/init."""
+    seen = set()
+    def rec(n):
+        if n in seen or n not in fns: return
+        seen.add(n)
+        for c in callees(fns[n]): rec(c)
+    for n in fns:
+        if RESET_NAMES.search(n): rec(n)
+    return seen
+
 def randomized_fields(fns):
-    """fields assigned from an expression containing a random-looking call."""
+    """fields assigned from a random-looking call, on a reset/init path. Parameters fixed per episode,
+    not per-step game randomness."""
     out = {}
+    on_reset = reset_reachable(fns)
     for name, fn in fns.items():
+        if name not in on_reset: continue
         for c in walk(fn):
             if c.kind == K.BINARY_OPERATOR and src_of(c).count('=') >= 1:
                 kids = list(c.get_children())
@@ -84,7 +100,7 @@ def randomized_fields(fns):
                 # find top-level '=' (not '==', '<=', etc.)
                 if '=' not in toks: continue
                 lhs_fields = [qual(ch) for ch in walk(lhs) if ch.kind == K.MEMBER_REF_EXPR]
-                if not lhs_fields: continue
+                if not lhs_fields or lhs_fields[0].endswith('.actions'): continue
                 if any(RAND_NAMES.search(n) for n in callees(rhs)):
                     out.setdefault(lhs_fields[0], []).append((name, loc(c)))
     return out
@@ -236,7 +252,9 @@ def main():
     ap.add_argument('--verbose', action='store_true')
     a = ap.parse_args()
     root = os.path.abspath(a.dir)
-    files = a.entry or sorted(os.path.join(root, f) for f in os.listdir(root) if f.endswith(('.c', '.h')))
+    SKIP = re.compile(r'(test|bench|example|demo)', re.I)
+    files = a.entry or sorted(os.path.join(root, f) for f in os.listdir(root)
+                              if f.endswith(('.c', '.h')) and not SKIP.search(f))
     idx = ci.Index.create()
     fns = {}
     for f in files:
