@@ -1,8 +1,9 @@
 # physlint
 
 A tool for checking that a simulator and the code deployed from it actually agree, and that a policy
-isn't leaning on something the simulator gets wrong. Right now it's stage 1: one environment, one harness,
-one report. There's no framework yet, on purpose.
+isn't leaning on something the simulator gets wrong. There's one check so far, `physlint/contract_check.py`,
+and it exists because a hand-written harness found one bug first. The framework, if it ever needs one, gets
+built the same way: one check per confirmed finding.
 
 Status: the finding is reproduced from source, and a second reviewer re-derived it independently from
 the public commit and the published thrust curve. Filed as tensaur/drone#35 (https://github.com/tensaur/drone/issues/35). We're waiting on the authors.
